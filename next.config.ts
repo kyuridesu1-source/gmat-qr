@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  images: {
-    unoptimized: true,
-  },
+  /* Vercel handles SSR/SSG natively — no output: 'export' needed */
 };
 
 export default nextConfig;
