@@ -8,10 +8,16 @@ import { Progress } from '@/components/ui/progress';
 import { DesktopSidebar, MobileNav } from '@/components/Sidebar';
 import { useEffect, useState } from 'react';
 import { getAllProgress, type TopicProgress } from '@/lib/progress';
+import { isFreeTopic } from '@/lib/auth-config';
+import { useSession } from 'next-auth/react';
+import { useAuthModal } from '@/components/LoginModal';
 import { cn } from '@/lib/utils';
+import { Lock } from 'lucide-react';
 
 export default function HomePage() {
   const [progress, setProgress] = useState<Record<string, TopicProgress>>({});
+  const { data: session } = useSession();
+  const { openLoginModal } = useAuthModal();
 
   useEffect(() => {
     setProgress(getAllProgress());
@@ -100,28 +106,39 @@ export default function HomePage() {
                       <span className="text-2xl">{cat.icon}</span>
                     </div>
                     <div className="space-y-1.5 mb-3">
-                      {topics.map((topic) => (
-                        <Link
-                          key={topic.slug}
-                          href={topic.ready ? `/topics/${topic.slug}` : '#'}
-                          onClick={!topic.ready ? (e) => e.preventDefault() : undefined}
-                          className={cn(
-                            'flex items-center gap-2 text-sm py-0.5',
-                            topic.ready
-                              ? 'hover:underline'
-                              : 'text-muted-foreground/50 cursor-not-allowed'
-                          )}
-                        >
-                          <span className={cn(
-                            'w-1.5 h-1.5 rounded-full shrink-0',
-                            topic.ready ? cat.color : 'bg-muted-foreground/30'
-                          )} />
-                          <span className="truncate">{topic.titleKR}</span>
-                          {!topic.ready && (
-                            <span className="text-[10px] ml-auto shrink-0 text-muted-foreground/40">준비중</span>
-                          )}
-                        </Link>
-                      ))}
+                      {topics.map((topic) => {
+                        const isPremium = !isFreeTopic(topic.slug);
+                        const isLocked = isPremium && !session;
+
+                        return (
+                          <Link
+                            key={topic.slug}
+                            href={topic.ready && !isLocked ? `/topics/${topic.slug}` : '#'}
+                            onClick={(e) => {
+                              if (!topic.ready) { e.preventDefault(); return; }
+                              if (isLocked) { e.preventDefault(); openLoginModal(topic.slug); return; }
+                            }}
+                            className={cn(
+                              'flex items-center gap-2 text-sm py-0.5',
+                              topic.ready
+                                ? 'hover:underline'
+                                : 'text-muted-foreground/50 cursor-not-allowed'
+                            )}
+                          >
+                            <span className={cn(
+                              'w-1.5 h-1.5 rounded-full shrink-0',
+                              topic.ready ? cat.color : 'bg-muted-foreground/30'
+                            )} />
+                            <span className="truncate">{topic.titleKR}</span>
+                            {!topic.ready && (
+                              <span className="text-[10px] ml-auto shrink-0 text-muted-foreground/40">준비중</span>
+                            )}
+                            {isLocked && topic.ready && (
+                              <Lock className="w-3 h-3 ml-auto shrink-0 text-muted-foreground/60" />
+                            )}
+                          </Link>
+                        );
+                      })}
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border/50">
                       <span>{readyCount}/{topics.length} 토픽</span>
@@ -146,10 +163,14 @@ export default function HomePage() {
               {readyTopics.map((topic) => {
                 const cat = getCategoryInfo(topic.category);
                 const tp = progress[topic.slug];
+                const isPremium = !isFreeTopic(topic.slug);
+                const isLocked = isPremium && !session;
+
                 return (
                   <Link
                     key={topic.slug}
-                    href={`/topics/${topic.slug}`}
+                    href={isLocked ? '#' : `/topics/${topic.slug}`}
+                    onClick={isLocked ? (e) => { e.preventDefault(); openLoginModal(topic.slug); } : undefined}
                     className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
                   >
                     <span className={cn('w-2 h-2 rounded-full shrink-0', cat.color)} />
@@ -157,7 +178,10 @@ export default function HomePage() {
                     <span className="text-xs text-muted-foreground hidden sm:inline">{topic.titleEN}</span>
                     <span className="text-xs text-muted-foreground shrink-0">~{topic.estimatedMinutes}분</span>
                     <span className="text-xs text-muted-foreground shrink-0">{topic.problems.length}문제</span>
-                    {tp && (
+                    {isLocked && (
+                      <Lock className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                    )}
+                    {!isLocked && tp && (
                       <Badge variant="secondary" className="text-[10px]">
                         {tp.correctCount}/{tp.totalAttempted}
                       </Badge>

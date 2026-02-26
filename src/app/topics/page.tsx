@@ -7,11 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { DesktopSidebar, MobileNav } from '@/components/Sidebar';
 import { useEffect, useState } from 'react';
 import { getAllProgress, type TopicProgress } from '@/lib/progress';
+import { isFreeTopic } from '@/lib/auth-config';
+import { useSession } from 'next-auth/react';
+import { useAuthModal } from '@/components/LoginModal';
 import { cn } from '@/lib/utils';
+import { Lock } from 'lucide-react';
 
 export default function TopicsPage() {
   const [activeCategory, setActiveCategory] = useState<Category | 'all'>('all');
   const [progress, setProgress] = useState<Record<string, TopicProgress>>({});
+  const { data: session } = useSession();
+  const { openLoginModal } = useAuthModal();
 
   useEffect(() => {
     setProgress(getAllProgress());
@@ -76,12 +82,17 @@ export default function TopicsPage() {
               const answered = tp?.totalAttempted ?? 0;
               const correct = tp?.correctCount ?? 0;
               const progressPercent = problemCount > 0 ? (answered / problemCount) * 100 : 0;
+              const isPremium = !isFreeTopic(topic.slug);
+              const isLocked = isPremium && !session;
 
               return (
                 <Link
                   key={topic.slug}
-                  href={topic.ready ? `/topics/${topic.slug}` : '#'}
-                  onClick={!topic.ready ? (e) => e.preventDefault() : undefined}
+                  href={topic.ready && !isLocked ? `/topics/${topic.slug}` : '#'}
+                  onClick={(e) => {
+                    if (!topic.ready) { e.preventDefault(); return; }
+                    if (isLocked) { e.preventDefault(); openLoginModal(topic.slug); return; }
+                  }}
                   className={cn(
                     'group flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border transition-all',
                     topic.ready
@@ -100,6 +111,12 @@ export default function TopicsPage() {
                             Coming Soon
                           </Badge>
                         )}
+                        {isLocked && topic.ready && (
+                          <Badge variant="secondary" className="text-[10px] gap-1">
+                            <Lock className="w-3 h-3" />
+                            로그인 필요
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">{topic.titleEN}</p>
                     </div>
@@ -112,7 +129,7 @@ export default function TopicsPage() {
                     </Badge>
                     <span>~{topic.estimatedMinutes}분</span>
                     {problemCount > 0 && <span>{problemCount}문제</span>}
-                    {tp && (
+                    {!isLocked && tp && (
                       <span className="font-medium text-foreground">
                         {correct}/{answered}
                       </span>
@@ -120,7 +137,7 @@ export default function TopicsPage() {
                   </div>
 
                   {/* Mini progress */}
-                  {tp && problemCount > 0 && (
+                  {!isLocked && tp && problemCount > 0 && (
                     <div className="w-16 shrink-0 hidden sm:block">
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                         <div

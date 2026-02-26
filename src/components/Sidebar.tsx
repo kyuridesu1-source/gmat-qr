@@ -3,16 +3,23 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ALL_TOPICS } from '@/data/topics';
-import { CATEGORIES, type Category } from '@/data/types';
+import { CATEGORIES } from '@/data/types';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { getAllProgress, type TopicProgress } from '@/lib/progress';
+import { isFreeTopic } from '@/lib/auth-config';
+import { useSession } from 'next-auth/react';
+import { useAuthModal } from '@/components/LoginModal';
+import { AuthButton } from '@/components/AuthButton';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Lock } from 'lucide-react';
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const { openLoginModal } = useAuthModal();
   const [progress, setProgress] = useState<Record<string, TopicProgress>>({});
 
   useEffect(() => {
@@ -81,11 +88,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                     const isActive = pathname === `/topics/${topic.slug}`;
                     const tp = progress[topic.slug];
                     const done = tp ? tp.totalAttempted >= topic.problems.length && topic.problems.length > 0 : false;
+                    const isPremium = !isFreeTopic(topic.slug);
+                    const isLocked = isPremium && !session;
+
                     return (
                       <Link
                         key={topic.slug}
-                        href={topic.ready ? `/topics/${topic.slug}` : '#'}
-                        onClick={topic.ready ? onNavigate : (e) => e.preventDefault()}
+                        href={topic.ready && !isLocked ? `/topics/${topic.slug}` : '#'}
+                        onClick={(e) => {
+                          if (!topic.ready) { e.preventDefault(); return; }
+                          if (isLocked) { e.preventDefault(); openLoginModal(topic.slug); return; }
+                          onNavigate?.();
+                        }}
                         className={cn(
                           'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
                           isActive
@@ -101,10 +115,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                             준비중
                           </span>
                         )}
-                        {done && (
+                        {isLocked && topic.ready && (
+                          <Lock className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                        )}
+                        {!isLocked && done && (
                           <span className="text-green-500 shrink-0">✓</span>
                         )}
-                        {tp && !done && topic.ready && (
+                        {!isLocked && tp && !done && topic.ready && (
                           <span className="text-[10px] text-muted-foreground shrink-0">
                             {tp.totalAttempted}/{topic.problems.length}
                           </span>
@@ -118,6 +135,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           })}
         </nav>
       </ScrollArea>
+
+      <div className="border-t">
+        <AuthButton />
+      </div>
     </div>
   );
 }
